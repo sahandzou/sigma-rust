@@ -6,7 +6,7 @@ use crate::box_coll::ErgoBoxes;
 use crate::ergo_state_ctx::ErgoStateContext;
 use crate::error_conversion::to_js;
 
-use ergo_lib::chain::transaction::reduced::reduce_tx;
+use ergo_lib::chain::transaction::reduced::{reduce_tx};
 use ergo_lib::chain::transaction::TxIoVec;
 use ergo_lib::ergotree_ir::serialization::SigmaSerializable;
 use wasm_bindgen::prelude::*;
@@ -85,30 +85,30 @@ impl ReducedTransaction {
         self.0.reduced_inputs().first().clone().reduction_result.sigma_prop.sigma_serialize_bytes().map_err(to_js)
     }
 
-    /// Generate commitment for first input with input address
-    pub fn generate_commitment_for_first_input(&self, secret_base16:&str)->Result<String, JsValue>{
-        let sigma_prop=self.0.reduced_inputs().first().clone().reduction_result.sigma_prop;
-        let secret=DlogProverInput::from_base16_str(secret_base16.to_string()).unwrap();
-        let pk=secret.public_image();
-        let generate_for:Vec<SigmaBoolean>=vec![SigmaBoolean::ProofOfKnowledge(SigmaProofOfKnowledgeTree::ProveDlog(pk.clone()))];
-        let hints=generate_commitments_for(sigma_prop,&generate_for);
-        let mut commitments:Vec<CommitmentHintJson>=Vec::new();
-        match hints.hints[0].clone(){
-            Hint::SecretProven(_) => {}
-            Hint::CommitmentHint(cmt) => {
-                let cmt_json:CommitmentHintJson=CommitmentHintJson::from(cmt);
-                commitments.push(cmt_json);
+    /// Generate commitment for index input with input address
+    pub fn generate_commitment_for_input(&self, secret_base16:&str, index:usize)->Result<String, JsValue>{
+        if let Some(result)=self.0.reduced_inputs().get(index){
+            let sigma_prop=result.clone().reduction_result.sigma_prop;
+            let secret=DlogProverInput::from_base16_str(secret_base16.to_string()).unwrap();
+            let pk=secret.public_image();
+            let generate_for:Vec<SigmaBoolean>=vec![SigmaBoolean::ProofOfKnowledge(SigmaProofOfKnowledgeTree::ProveDlog(pk.clone()))];
+            let hints=generate_commitments_for(sigma_prop,&generate_for);
+            let mut commitments:Vec<CommitmentHintJson>=Vec::new();
+            for hint in hints.hints{
+                match hint{
+                    Hint::SecretProven(_) => {}
+                    Hint::CommitmentHint(cmt) => {
+                        let cmt_json:CommitmentHintJson=CommitmentHintJson::from(cmt);
+                        commitments.push(cmt_json);
+                    }
+                }
             }
+            serde_json::to_string_pretty(&commitments)
+                .map_err(|e| JsValue::from_str(&format!("{}", e)))
+        }else{
+            Err(JsValue::from_str("index is out of bound"))
         }
-        match hints.hints[1].clone(){
-            Hint::SecretProven(_) => {}
-            Hint::CommitmentHint(cmt) => {
-                let cmt_json:CommitmentHintJson=CommitmentHintJson::from(cmt);
-                commitments.push(cmt_json);
-            }
-        }
-        serde_json::to_string_pretty(&commitments)
-            .map_err(|e| JsValue::from_str(&format!("{}", e)))
+
     }
 
     /// bag for multi sig
